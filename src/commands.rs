@@ -1,9 +1,46 @@
 use crate::utilities;
 use nagisa::prelude::*;
+use tracing::{error, info, warn};
 
 #[command("/ping")]
 async fn ping(reply: Reply) -> HandlerResult {
     reply.text("pong").await?;
+    Ok(())
+}
+
+#[command("/face")]
+async fn face(reply: Reply, CommandArg(segments): CommandArg) -> HandlerResult {
+    let Some(segment) = segments.first() else {
+        bail!(
+            ActionErrorKind::BadParams,
+            "Need 1 number param, find no param."
+        );
+    };
+    let Some(text) = segment.as_text() else {
+        bail!(
+            ActionErrorKind::BadParams,
+            "Need 1 number param, find other type."
+        );
+    };
+    reply.face(text).await?;
+    Ok(())
+}
+
+#[command("/faceid")]
+async fn faceid(reply: Reply, CommandArg(segments): CommandArg) -> HandlerResult {
+    let Some(segment) = segments.first() else {
+        bail!(
+            ActionErrorKind::BadParams,
+            "Need 1 face param, find no param."
+        );
+    };
+    let Segment::Face { id, .. } = segment else {
+        bail!(
+            ActionErrorKind::BadParams,
+            "Need 1 face param, find other type."
+        );
+    };
+    reply.text(id).await?;
     Ok(())
 }
 
@@ -32,6 +69,8 @@ async fn react(bot: Bot, Args(ReactArgs { id, faces, content }): Args<ReactArgs>
             bot.actions()
                 .set_msg_reaction(&id, emoji.as_str(), true)
                 .await?;
+        } else {
+            warn!("Do not support hybrid emoji \"{}\".", emoji.glyph);
         }
     }
     Ok(())
