@@ -1,6 +1,6 @@
 mod commands;
 mod events;
-mod utilities;
+mod tools;
 
 use nagisa::prelude::*;
 

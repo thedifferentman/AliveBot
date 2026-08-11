@@ -1,4 +1,4 @@
-use crate::utilities;
+use crate::tools;
 use nagisa::prelude::*;
 use tracing::{error, info, warn};
 
@@ -65,7 +65,7 @@ async fn react(bot: Bot, Args(ReactArgs { id, faces, content }): Args<ReactArgs>
     }
     let emojis = emojito::find_emoji(content);
     for emoji in emojis {
-        if let Some(emoji) = utilities::napcat_emoji_id(emoji) {
+        if let Some(emoji) = tools::emoji::napcat_emoji_id(emoji) {
             bot.actions()
                 .set_msg_reaction(&id, emoji.as_str(), true)
                 .await?;

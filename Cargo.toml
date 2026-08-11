@@ -4,8 +4,13 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+anyhow = "1.0.104"
+bimap = "0.6.3"
 emojito = "0.3.5"
 nagisa = { version = "0.12.0", default-features = false, features = ["onebot"] }
-tokio = { version = "1.53.1", features = ["macros", "rt-multi-thread", "signal"] }
+reqwest = "0.13.4"
+tempfile = "3.27.0"
+tokio = { version = "1.53.1", features = ["fs", "macros", "process", "rt-multi-thread", "signal"] }
 tracing = "0.1.44"
 tracing-subscriber = "0.3.23"
+whisper-rs = { version = "0.16.0", features = ["cuda", "tracing_backend"] }
