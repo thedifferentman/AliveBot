@@ -4,6 +4,7 @@ mod context_manage;
 mod events;
 mod llm_calling;
 mod tools;
+mod temperature_manage;
 
 use crate::context_manage::CONTEXT;
 use clap::Parser;
@@ -40,7 +41,7 @@ struct Args {
     #[arg(long, short)]
     model: Option<String>,
     #[arg(long, short)]
-    temperature: Option<f32>,
+    temperature: Option<f64>,
     #[arg(long)]
     top_p: Option<f32>,
     #[arg(long)]
@@ -64,7 +65,7 @@ pub struct Config {
     pub openai_url: String,
     pub api_key: String,
     pub model: String,
-    pub temperature: f32,
+    pub temperature: f64,
     pub top_p: f32,
     pub top_k: u32,
     pub repeat_penalty: f32,

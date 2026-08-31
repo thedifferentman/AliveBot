@@ -1,5 +1,6 @@
 use crate::CONFIG;
 use crate::llm_calling::request_token_count;
+use crate::temperature_manage::TemperatureDecay;
 use anyhow::{Result, anyhow};
 use nagisa::prelude::*;
 use serde_json::{Value, json};
@@ -12,6 +13,7 @@ pub struct Context {
     config: Value,
     system: String,
     ctx: Vec<Value>,
+    pub temp_decay: TemperatureDecay,
 }
 
 pub static CONTEXT: OnceLock<Mutex<HashMap<Peer, Arc<Mutex<Context>>>>> = OnceLock::new();
@@ -30,6 +32,7 @@ impl Context {
             }),
             system: config.system_prompt.clone(),
             ctx: vec![],
+            temp_decay: TemperatureDecay::new(),
         }
     }
 
@@ -37,11 +40,11 @@ impl Context {
         self.ctx.clear();
     }
 
-    pub async fn push(&mut self, content: Value) {
+    pub fn push(&mut self, content: Value) {
         self.ctx.push(content);
     }
 
-    pub async fn extend(&mut self, content: Vec<Value>) {
+    pub fn extend(&mut self, content: Vec<Value>) {
         self.ctx.extend(content);
     }
 
@@ -61,6 +64,7 @@ impl Context {
 impl Into<Value> for &Context {
     fn into(self) -> Value {
         let mut result = self.config.clone();
+        result["temperature"] = json!(self.temp_decay.get_temp());
         result.as_object_mut().unwrap().insert(
             "messages".to_string(),
             json!([

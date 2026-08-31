@@ -47,38 +47,34 @@ async fn common_message(bot: Bot, message: MessageEvent) -> HandlerResult {
         )
     };
     let mut context = shared_context.lock().await;
-    context
-        .push(json!({
-            "type":"text",
-            "text":format!("<message id:{}, sender:{}>",
-                message_id,
-                ID_MAP.get_by_left(
-                    &message.sender.to_string()
-                )
-                .unwrap_or_else(
-                    || message.member.as_ref().unwrap().nickname.as_str()
-                )
+    context.push(json!({
+        "type":"text",
+        "text":format!("<message id:{}, sender:{}>",
+            message_id,
+            ID_MAP.get_by_left(
+                &message.sender.to_string()
             )
-        }))
-        .await;
+            .unwrap_or_else(
+                || message.member.as_ref().unwrap().nickname.as_str()
+            )
+        )
+    }));
     let content = segments_to_lite(message.content)
         .await
         .into_iter()
         .map(LiteSegment::into)
         .collect();
-    context.extend(content).await;
-    context
-        .push(json!({
-            "type":"text",
-            "text":"</message>"
-        }))
-        .await;
+    context.extend(content);
+    context.push(json!({
+        "type":"text",
+        "text":"</message>"
+    }));
     context.cut().await.unwrap();
     let answer = request_llamacpp(&*context)
         .await
         .map_err(|e| Error::action(e.to_string()))?;
     drop(context);
-    send_message(bot, answer.as_str(), message.peer).await
+    send_message(bot, answer.as_str(), message.peer, shared_context).await
 }
 
 pub async fn forward_message(bot: Bot, forward_id: &str, peer: Peer) -> HandlerResult {
@@ -92,48 +88,40 @@ pub async fn forward_message(bot: Bot, forward_id: &str, peer: Peer) -> HandlerR
         )
     };
     let mut context = shared_context.lock().await;
-    context
-        .push(json!({
-            "type":"text",
-            "text":"<forward>"
-        }))
-        .await;
+    context.push(json!({
+        "type":"text",
+        "text":"<forward>"
+    }));
     for node in forward {
-        context
-            .push(json!({
-                "type":"text",
-                "text":format!("<message id:0, sender:{}>",
-                    ID_MAP.get_by_left(
-                        node.user.0.to_string().as_str()
-                    )
-                    .unwrap_or(node.name.as_str()))
-            }))
-            .await;
+        context.push(json!({
+            "type":"text",
+            "text":format!("<message id:0, sender:{}>",
+                ID_MAP.get_by_left(
+                    node.user.0.to_string().as_str()
+                )
+                .unwrap_or(node.name.as_str()))
+        }));
         let content = segments_to_lite(node.content)
             .await
             .into_iter()
             .map(LiteSegment::into)
             .collect();
-        context.extend(content).await;
-        context
-            .push(json!({
-                "type":"text",
-                "text":"</message>"
-            }))
-            .await;
-    }
-    context
-        .push(json!({
+        context.extend(content);
+        context.push(json!({
             "type":"text",
-            "text":"</forward>"
-        }))
-        .await;
+            "text":"</message>"
+        }));
+    }
+    context.push(json!({
+        "type":"text",
+        "text":"</forward>"
+    }));
     context.cut().await.unwrap();
     let answer = request_llamacpp(&*context)
         .await
         .map_err(|e| Error::action(e.to_string()))?;
     drop(context);
-    send_message(bot, answer.as_str(), peer).await
+    send_message(bot, answer.as_str(), peer, shared_context).await
 }
 
 #[event(Reaction, gate = Rule::pred(rule_not_command))]
@@ -172,20 +160,18 @@ async fn reaction_message(bot: Bot, notice: Notice) -> HandlerResult {
         )
     };
     let mut context = shared_context.lock().await;
-    context
-        .push(json!({
-            "type":"text",
-            "text":format!(
-                "<emoji_like sender:{sender}, messageid:{message_id}, face:{face}>"
-            )
-        }))
-        .await;
+    context.push(json!({
+        "type":"text",
+        "text":format!(
+            "<emoji_like sender:{sender}, messageid:{message_id}, face:{face}>"
+        )
+    }));
     context.cut().await.unwrap();
     let answer = request_llamacpp(&*context)
         .await
         .map_err(|e| Error::action(e.to_string()))?;
     drop(context);
-    send_message(bot, answer.as_str(), peer).await
+    send_message(bot, answer.as_str(), peer, shared_context).await
 }
 
 #[event(Nudge, gate = Rule::pred(rule_not_command))]
@@ -211,16 +197,14 @@ async fn nudge_message(bot: Bot, notice: Notice) -> HandlerResult {
         )
     };
     let mut context = shared_context.lock().await;
-    context
-        .push(json!({
-            "type":"text",
-            "text":format!("<nudge sender:{sender}, receiver:{receiver}>")
-        }))
-        .await;
+    context.push(json!({
+        "type":"text",
+        "text":format!("<nudge sender:{sender}, receiver:{receiver}>")
+    }));
     context.cut().await.unwrap();
     let answer = request_llamacpp(&*context)
         .await
         .map_err(|e| Error::action(e.to_string()))?;
     drop(context);
-    send_message(bot, answer.as_str(), peer).await
+    send_message(bot, answer.as_str(), peer, shared_context).await
 }

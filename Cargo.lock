@@ -13,6 +13,7 @@ dependencies = [
  "emojito",
  "ffmpeg-sidecar",
  "nagisa",
+ "rand 0.10.2",
  "reqwest",
  "serde",
  "serde_json",

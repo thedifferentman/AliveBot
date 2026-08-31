@@ -91,7 +91,15 @@ async fn react(bot: Bot, Args(ReactArgs { id, faces, content }): Args<ReactArgs>
     Ok(())
 }
 
-pub async fn send_message(bot: Bot, message: &str, peer: Peer) -> HandlerResult {
+pub async fn send_message(
+    bot: Bot,
+    message: &str,
+    peer: Peer,
+    shared_context: Arc<Mutex<Context>>,
+) -> HandlerResult {
+    if rand::random::<f64>() < shared_context.lock().await.temp_decay.skip_probability() {
+        return Ok(());
+    }
     match tools::message::parse_outgoing(message, peer)? {
         Outgoing::Noop => {}
         Outgoing::Unfold(id) => {
@@ -99,6 +107,7 @@ pub async fn send_message(bot: Bot, message: &str, peer: Peer) -> HandlerResult 
         }
         Outgoing::Nudge(receiver) => {
             bot.send_nudge(&peer, receiver).await?;
+            shared_context.lock().await.temp_decay.increase();
         }
         Outgoing::Reaction { message_id, face } => {
             bot.actions()
@@ -112,9 +121,11 @@ pub async fn send_message(bot: Bot, message: &str, peer: Peer) -> HandlerResult 
                     true,
                 )
                 .await?;
+            shared_context.lock().await.temp_decay.increase();
         }
         Outgoing::Segments(segments) => {
             bot.send(&peer, &segments).await?;
+            shared_context.lock().await.temp_decay.increase();
         }
     }
     Ok(())
