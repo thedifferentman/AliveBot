@@ -1,10 +1,25 @@
+use crate::context_manage::{CONTEXT, Context};
+use crate::events::forward_message;
 use crate::tools;
+use crate::tools::message::Outgoing;
 use nagisa::prelude::*;
-use tracing::{error, info, warn};
+use std::sync::Arc;
+use tokio::sync::Mutex;
+use tracing::{info, warn};
 
 #[command("/ping")]
 async fn ping(reply: Reply) -> HandlerResult {
     reply.text("pong").await?;
+    Ok(())
+}
+
+#[command("/new")]
+pub async fn new(message_event: MessageEvent) -> HandlerResult {
+    CONTEXT.get().unwrap().lock().await.insert(
+        message_event.peer.clone(),
+        Arc::new(Mutex::new(Context::new())),
+    );
+    info!("New context created");
     Ok(())
 }
 
@@ -71,6 +86,35 @@ async fn react(bot: Bot, Args(ReactArgs { id, faces, content }): Args<ReactArgs>
                 .await?;
         } else {
             warn!("Do not support hybrid emoji \"{}\".", emoji.glyph);
+        }
+    }
+    Ok(())
+}
+
+pub async fn send_message(bot: Bot, message: &str, peer: Peer) -> HandlerResult {
+    match tools::message::parse_outgoing(message, peer)? {
+        Outgoing::Noop => {}
+        Outgoing::Unfold(id) => {
+            Box::pin(forward_message(bot, &id, peer)).await?;
+        }
+        Outgoing::Nudge(receiver) => {
+            bot.send_nudge(&peer, receiver).await?;
+        }
+        Outgoing::Reaction { message_id, face } => {
+            bot.actions()
+                .set_msg_reaction(
+                    &MessageId {
+                        peer,
+                        seq: 0,
+                        onebot_id: Some(message_id),
+                    },
+                    &face,
+                    true,
+                )
+                .await?;
+        }
+        Outgoing::Segments(segments) => {
+            bot.send(&peer, &segments).await?;
         }
     }
     Ok(())

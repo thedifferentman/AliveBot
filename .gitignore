@@ -1,3 +1,7 @@
 /target
 /resources
 /models
+/memes/
+/src/bin
+/config/idmap.csv
+/config/memes.csv

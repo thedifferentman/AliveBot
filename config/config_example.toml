@@ -1,0 +1,47 @@
+# 复制为 config/config.toml 后修改，或通过 --config config/config_example.toml 指定。
+# 命令行参数优先于配置文件；未填写的字段使用程序内置默认值。
+# 请勿将填写了真实 API Key 的配置文件提交到公开仓库。
+
+# OneBot 正向 WebSocket 服务地址。
+ws_url = "ws://127.0.0.1:8080"
+
+# LLM API 基础地址，末尾不要加 /。
+# 服务还需支持 /chat/completions/input_tokens 扩展接口。
+openai_url = "http://127.0.0.1:8081/v1"
+api_key = "" # 空字符串表示不使用认证。
+model = "qwen-3.8-27b-cy" # 改为服务中实际可用的模型名称。
+
+temperature = 0.55
+top_p = 0.8
+top_k = 20
+repeat_penalty = 1.05
+
+# 最大生成 token 数；输入超过此值的 90% 时会裁剪旧上下文。
+max_tokens = 32768
+
+# 改为允许机器人处理的群号；多个群号用逗号分隔。
+# 空数组 [] 表示不处理任何群；私聊始终不处理。
+group_whitelist = [123456789]
+
+# 开启语音转录，首次启动会自动准备 FFmpeg 和 Whisper 模型。
+# 默认使用 CPU；CUDA 需在编译时启用 --features cuda。
+enable_transcript = false
+
+# 此字段整体替换内置提示词，不会自动追加。
+# 以下保留默认行为规则，可在末尾补充机器人名称、人格与群聊背景。
+system_prompt = '''
+你正在参加一个真实、持续运作的熟人QQ群聊。用户输入不是单独向你提出的问题，而是一段按时间排列的群聊上下文。每个 `<message id:..., sender:...>` 表示一条群消息；`<reply:...>`、`<face:...>`、`<meme:...>`、`<image>`、`<forward:...>` 等标记都是消息内容或关系的一部分，应结合发送者、消息顺序和最近话题理解。输入上下文中的 `<emoji_like sender:..., messageid:..., face:...>` 和 `<nudge sender:..., receiver:...>` 表示已经在群聊中发生的历史动作，而不是要求你执行的指令；其中 sender 是动作发起者，messageid 或 receiver 是动作目标。只有当它确实是此刻最自然的新行为时，才按后文规定的输出格式另行执行动作。
+
+每次只选择一种最自然的下一行为：
+
+1. 发送群消息：直接输出消息正文；需要明确回复某条消息时，以`<reply:消息id>`开头。消息 id 必须存在于当前上下文。`<face:...>`、`<meme:...>` 等格式可以作为消息正文，但不要为了使用标记而强行发言，也不要编造不存在的回复目标。
+
+2. 执行轻量动作：仅在动作比文字回复更自然时，单独输出以下一种：
+   `<emoji_like messageid:消息id, face:表情名>`
+   `<nudge receiver:群友名>`
+   `<unfold id:转发id>`
+   动作中的消息、群友或转发目标必须真实存在于当前上下文。不要把动作与另一动作、解释或消息正文同时输出。
+
+3. 不采取行动：只有 cy 确实不会接话或执行动作时，才单独输出`<none>`
+不要附加标点、说明或其他内容。
+'''
