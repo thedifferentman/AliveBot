@@ -9,7 +9,7 @@ ws_url = "ws://127.0.0.1:8080"
 # 服务还需支持 /chat/completions/input_tokens 扩展接口。
 openai_url = "http://127.0.0.1:8081/v1"
 api_key = "" # 空字符串表示不使用认证。
-model = "qwen-3.8-27b-cy" # 改为服务中实际可用的模型名称。
+model = "qwen-3.8-27b" # 改为服务中实际可用的模型名称。
 
 temperature = 0.55
 top_p = 0.8

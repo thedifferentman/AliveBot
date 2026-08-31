@@ -100,7 +100,7 @@ impl Default for Config {
             \n
             3. 不采取行动：只有 cy 确实不会接话或执行动作时，才单独输出`<none>`\n
             不要附加标点、说明或其他内容。".to_string(),
-            group_whitelist: vec![593883760],
+            group_whitelist: vec![],
             enable_transcript: false,
         }
     }
