@@ -1,5 +1,6 @@
+use crate::CONFIG;
 use crate::actions::send_message;
-use crate::context_manage::{CONTEXT, Context};
+use crate::context_manage::{CONTEXT, SharedContext};
 use crate::llm_calling::request_llamacpp;
 use crate::tools::emoji::reaction_name;
 use crate::tools::message::{LiteSegment, segments_to_lite};
@@ -7,8 +8,8 @@ use crate::tools::static_map::ID_MAP;
 use nagisa::*;
 use serde_json::json;
 use std::sync::Arc;
-use tokio::sync::Mutex;
-use tracing::warn;
+use std::sync::atomic::Ordering;
+use tracing::{info, warn};
 
 fn rule_not_command(ctx: &Ctx) -> bool {
     let Some(message) = ctx.message() else {
@@ -18,6 +19,10 @@ fn rule_not_command(ctx: &Ctx) -> bool {
         return true;
     };
     !text.trim_start().starts_with('/')
+}
+
+fn is_own_account(bot: &Bot, user: Uin) -> bool {
+    user == bot.self_id() || CONFIG.get().unwrap().self_accounts.contains(&user.0)
 }
 
 async fn group_member_name(bot: &Bot, group: Uin, user: Uin) -> Result<String> {
@@ -34,6 +39,7 @@ async fn group_member_name(bot: &Bot, group: Uin, user: Uin) -> Result<String> {
 
 #[event(Message, gate = Rule::pred(rule_not_command))]
 async fn common_message(bot: Bot, message: MessageEvent) -> HandlerResult {
+    let is_own_message = message.is_self || is_own_account(&bot, message.sender);
     let Some(message_id) = message.id.onebot_id else {
         warn!("message without a OneBot message_id was skipped");
         return Ok(());
@@ -43,10 +49,14 @@ async fn common_message(bot: Bot, message: MessageEvent) -> HandlerResult {
         Arc::clone(
             guard
                 .entry(message.peer.clone())
-                .or_insert_with(|| Arc::new(Mutex::new(Context::new()))),
+                .or_insert_with(|| Arc::new(SharedContext::new())),
         )
     };
-    let mut context = shared_context.lock().await;
+    let expected_revision = shared_context
+        .revision
+        .fetch_add(1, Ordering::Relaxed)
+        .wrapping_add(1);
+    let mut context = shared_context.context.lock().await;
     context.push(json!({
         "type":"text",
         "text":format!("<message id:{}, sender:{}>",
@@ -70,24 +80,43 @@ async fn common_message(bot: Bot, message: MessageEvent) -> HandlerResult {
         "text":"</message>"
     }));
     context.cut().await.unwrap();
+    if is_own_message {
+        return Ok(());
+    }
+    let current_revision = shared_context.revision.load(Ordering::Relaxed);
+    if current_revision != expected_revision {
+        info!(
+            expected_revision,
+            current_revision, "Newer message arrived; model call was cancelled"
+        );
+        return Ok(());
+    }
     let answer = request_llamacpp(&*context)
         .await
         .map_err(|e| Error::action(e.to_string()))?;
     drop(context);
-    send_message(bot, answer.as_str(), message.peer, shared_context).await
+    send_message(
+        bot,
+        answer.as_str(),
+        message.peer,
+        shared_context,
+        expected_revision,
+    )
+    .await
 }
 
-pub async fn forward_message(bot: Bot, forward_id: &str, peer: Peer) -> HandlerResult {
+pub async fn forward_message(
+    bot: Bot,
+    forward_id: &str,
+    peer: Peer,
+    shared_context: Arc<SharedContext>,
+    expected_revision: u64,
+) -> HandlerResult {
+    if shared_context.revision.load(Ordering::Relaxed) != expected_revision {
+        return Ok(());
+    }
     let forward = bot.get_forward_messages(forward_id).await?;
-    let shared_context = {
-        let mut guard = CONTEXT.get().unwrap().lock().await;
-        Arc::clone(
-            guard
-                .entry(peer.clone())
-                .or_insert_with(|| Arc::new(Mutex::new(Context::new()))),
-        )
-    };
-    let mut context = shared_context.lock().await;
+    let mut context = shared_context.context.lock().await;
     context.push(json!({
         "type":"text",
         "text":"<forward>"
@@ -117,11 +146,26 @@ pub async fn forward_message(bot: Bot, forward_id: &str, peer: Peer) -> HandlerR
         "text":"</forward>"
     }));
     context.cut().await.unwrap();
+    let current_revision = shared_context.revision.load(Ordering::Relaxed);
+    if current_revision != expected_revision {
+        info!(
+            expected_revision,
+            current_revision, "Newer message arrived; model call was cancelled"
+        );
+        return Ok(());
+    }
     let answer = request_llamacpp(&*context)
         .await
         .map_err(|e| Error::action(e.to_string()))?;
     drop(context);
-    send_message(bot, answer.as_str(), peer, shared_context).await
+    send_message(
+        bot,
+        answer.as_str(),
+        peer,
+        shared_context,
+        expected_revision,
+    )
+    .await
 }
 
 #[event(Reaction, gate = Rule::pred(rule_not_command))]
@@ -138,6 +182,7 @@ async fn reaction_message(bot: Bot, notice: Notice) -> HandlerResult {
     else {
         return Ok(());
     };
+    let is_own_action = is_own_account(&bot, user);
     let Some(face) = reaction_name(&face_id, kind) else {
         return Ok(());
     };
@@ -156,10 +201,18 @@ async fn reaction_message(bot: Bot, notice: Notice) -> HandlerResult {
         Arc::clone(
             guard
                 .entry(peer)
-                .or_insert_with(|| Arc::new(Mutex::new(Context::new()))),
+                .or_insert_with(|| Arc::new(SharedContext::new())),
         )
     };
-    let mut context = shared_context.lock().await;
+    let expected_revision = if is_own_action {
+        shared_context
+            .revision
+            .fetch_add(1, Ordering::Relaxed)
+            .wrapping_add(1)
+    } else {
+        shared_context.revision.load(Ordering::Relaxed)
+    };
+    let mut context = shared_context.context.lock().await;
     context.push(json!({
         "type":"text",
         "text":format!(
@@ -167,11 +220,29 @@ async fn reaction_message(bot: Bot, notice: Notice) -> HandlerResult {
         )
     }));
     context.cut().await.unwrap();
+    if is_own_action {
+        return Ok(());
+    }
+    let current_revision = shared_context.revision.load(Ordering::Relaxed);
+    if current_revision != expected_revision {
+        info!(
+            expected_revision,
+            current_revision, "Newer message arrived; model call was cancelled"
+        );
+        return Ok(());
+    }
     let answer = request_llamacpp(&*context)
         .await
         .map_err(|e| Error::action(e.to_string()))?;
     drop(context);
-    send_message(bot, answer.as_str(), peer, shared_context).await
+    send_message(
+        bot,
+        answer.as_str(),
+        peer,
+        shared_context,
+        expected_revision,
+    )
+    .await
 }
 
 #[event(Nudge, gate = Rule::pred(rule_not_command))]
@@ -186,6 +257,7 @@ async fn nudge_message(bot: Bot, notice: Notice) -> HandlerResult {
         return Ok(());
     };
     let peer = Peer::group(group);
+    let is_own_action = is_own_account(&bot, sender);
     let sender = group_member_name(&bot, group, sender).await?;
     let receiver = group_member_name(&bot, group, receiver).await?;
     let shared_context = {
@@ -193,18 +265,44 @@ async fn nudge_message(bot: Bot, notice: Notice) -> HandlerResult {
         Arc::clone(
             guard
                 .entry(peer)
-                .or_insert_with(|| Arc::new(Mutex::new(Context::new()))),
+                .or_insert_with(|| Arc::new(SharedContext::new())),
         )
     };
-    let mut context = shared_context.lock().await;
+    let expected_revision = if is_own_action {
+        shared_context
+            .revision
+            .fetch_add(1, Ordering::Relaxed)
+            .wrapping_add(1)
+    } else {
+        shared_context.revision.load(Ordering::Relaxed)
+    };
+    let mut context = shared_context.context.lock().await;
     context.push(json!({
         "type":"text",
         "text":format!("<nudge sender:{sender}, receiver:{receiver}>")
     }));
     context.cut().await.unwrap();
+    if is_own_action {
+        return Ok(());
+    }
+    let current_revision = shared_context.revision.load(Ordering::Relaxed);
+    if current_revision != expected_revision {
+        info!(
+            expected_revision,
+            current_revision, "Newer message arrived; model call was cancelled"
+        );
+        return Ok(());
+    }
     let answer = request_llamacpp(&*context)
         .await
         .map_err(|e| Error::action(e.to_string()))?;
     drop(context);
-    send_message(bot, answer.as_str(), peer, shared_context).await
+    send_message(
+        bot,
+        answer.as_str(),
+        peer,
+        shared_context,
+        expected_revision,
+    )
+    .await
 }

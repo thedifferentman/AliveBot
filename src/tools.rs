@@ -62,6 +62,7 @@ pub mod utility {
     use crate::tools::static_map::{ID_MAP, MEME_MAP};
     use nagisa::prelude::*;
     use std::path::PathBuf;
+    use tokio::sync::Mutex;
 
     const MEME_DIR: &str = "memes";
 
@@ -82,7 +83,7 @@ pub mod utility {
         if MEME_MAP.get_by_right(name).is_none() {
             return bad_params(format!("unknown meme: {name}"));
         }
-        ["jpg", "png", "gif", "jpeg"]
+        let path = ["jpg", "png", "gif", "jpeg"]
             .into_iter()
             .map(|extension| PathBuf::from(MEME_DIR).join(format!("{name}.{extension}")))
             .find(|path| path.is_file())
@@ -91,7 +92,28 @@ pub mod utility {
                     ActionErrorKind::NotFound,
                     format!("meme image not found: {name}"),
                 )
-            })
+            })?;
+        std::env::current_dir()
+            .map(|current_dir| current_dir.join(path))
+            .map_err(|error| Error::action(format!("failed to resolve meme path: {error}")))
+    }
+
+    pub static CONFIRM_LOCK: Mutex<()> = Mutex::const_new(());
+
+    pub async fn confirm(text: &str) -> anyhow::Result<bool> {
+        
+        println!("{} [Y/N]:", text);
+        let input = tokio::task::spawn_blocking(|| -> std::io::Result<String> {
+            let mut input = String::new();
+            std::io::stdin().read_line(&mut input)?;
+            Ok(input)
+        })
+        .await??;
+        match input.trim().to_lowercase().as_str() {
+            "y" => Ok(true),
+            "n" => Ok(false),
+            _ => anyhow::bail!("invalid input"),
+        }
     }
 }
 

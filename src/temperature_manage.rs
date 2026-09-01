@@ -28,7 +28,7 @@ impl TemperatureDecay {
     }
 
     pub fn skip_probability(&self) -> f64 {
-        (self.get_decay() / CONFIG.get().unwrap().temperature / 2.0).min(1.0)
+        (self.get_decay() / CONFIG.get().unwrap().temperature).min(1.0)
     }
 
     pub fn increase(&mut self) {

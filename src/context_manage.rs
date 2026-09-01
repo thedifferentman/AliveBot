@@ -5,6 +5,7 @@ use anyhow::{Result, anyhow};
 use nagisa::prelude::*;
 use serde_json::{Value, json};
 use std::collections::HashMap;
+use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, OnceLock};
 use tokio::sync::Mutex;
 
@@ -16,7 +17,22 @@ pub struct Context {
     pub temp_decay: TemperatureDecay,
 }
 
-pub static CONTEXT: OnceLock<Mutex<HashMap<Peer, Arc<Mutex<Context>>>>> = OnceLock::new();
+#[derive(Debug)]
+pub struct SharedContext {
+    pub context: Mutex<Context>,
+    pub revision: AtomicU64,
+}
+
+impl SharedContext {
+    pub fn new() -> Self {
+        Self {
+            context: Mutex::new(Context::new()),
+            revision: AtomicU64::new(0),
+        }
+    }
+}
+
+pub static CONTEXT: OnceLock<Mutex<HashMap<Peer, Arc<SharedContext>>>> = OnceLock::new();
 
 impl Context {
     pub fn new() -> Self {

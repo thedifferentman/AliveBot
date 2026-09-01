@@ -23,6 +23,9 @@ max_tokens = 32768
 # 空数组 [] 表示不处理任何群；私聊始终不处理。
 group_whitelist = [123456789]
 
+# 这些账号的消息会加入上下文并更新会话版本，但不会触发模型回复。
+self_accounts = [1787552039, 3550036364]
+
 # 开启语音转录，首次启动会自动准备 FFmpeg 和 Whisper 模型。
 # 默认使用 CPU；CUDA 需在编译时启用 --features cuda。
 enable_transcript = false

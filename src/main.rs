@@ -3,8 +3,8 @@ mod actions;
 mod context_manage;
 mod events;
 mod llm_calling;
-mod tools;
 mod temperature_manage;
+mod tools;
 
 use crate::context_manage::CONTEXT;
 use clap::Parser;
@@ -53,6 +53,8 @@ struct Args {
     #[arg(long)]
     group_whitelist: Option<Vec<i64>>,
     #[arg(long)]
+    self_accounts: Option<Vec<i64>>,
+    #[arg(long)]
     system_prompt: Option<String>,
     #[arg(long)]
     enable_transcript: Option<bool>,
@@ -72,6 +74,7 @@ pub struct Config {
     pub max_tokens: u32,
     pub system_prompt: String,
     pub group_whitelist: Vec<i64>,
+    pub self_accounts: Vec<i64>,
     pub enable_transcript: bool,
 }
 
@@ -101,6 +104,7 @@ impl Default for Config {
             3. 不采取行动：只有 cy 确实不会接话或执行动作时，才单独输出`<none>`\n
             不要附加标点、说明或其他内容。".to_string(),
             group_whitelist: vec![],
+            self_accounts: vec![1787552039, 3550036364],
             enable_transcript: false,
         }
     }
@@ -138,6 +142,7 @@ impl Config {
             max_tokens,
             system_prompt,
             group_whitelist,
+            self_accounts,
             enable_transcript,
         );
         result
