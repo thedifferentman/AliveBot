@@ -1,0 +1,9 @@
+# AliveBot 专用，主提示词由 config/config.toml 的 system_prompt 提供。
+model = "gpt-6.1-sol"
+model_context_window = 262144
+model_auto_compact_token_limit = 245760
+model_reasoning_effort = "high"
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
+cli_auth_credentials_store = "file"
+notify = []

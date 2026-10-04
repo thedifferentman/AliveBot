@@ -1,0 +1,6 @@
+{
+  "port": 4097,
+  "executable": "codex",
+  "home": "../codex-home",
+  "workspace": "../workspace"
+}

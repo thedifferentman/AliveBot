@@ -4,5 +4,12 @@
 /memes/
 /src/bin
 /config/idmap.csv
-/config/memes.csv
 /config/config.toml
+/config/backup/
+/workspace/
+/codex-home/
+/config/codex.toml
+
+/codex-service/config.json
+
+/config/ziying.toml

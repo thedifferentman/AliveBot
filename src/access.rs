@@ -17,6 +17,9 @@ impl GroupWhitelist {
 #[nagisa::async_trait]
 impl Middleware for GroupWhitelist {
     async fn handle(&self, ctx: Arc<Ctx>, next: Next<'_>) -> Flow {
+        if matches!(ctx.event().as_ref(), Event::Meta(_)) {
+            return next.run(ctx).await;
+        }
         match ctx.event().group() {
             Some(group) if self.groups.contains(&group) => next.run(ctx).await,
             _ => Flow::Stop,
