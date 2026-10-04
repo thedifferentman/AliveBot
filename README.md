@@ -12,7 +12,7 @@ AliveBot（灰眸）是一个 Rust 编写的基于 [nagisa](https://github.com/d
 
 - 一个提供 WebSocket 地址的 OneBot 实现，推荐 [NapCatQQ](https://github.com/NapNeko/NapCatQQ)。
 
-- Codex CLI 0.160.0 或更新版本，以及 Node.js 22 或更新版本。机器人使用自己的 `codex-home`，不读取桌面 Codex 的个人配置。
+- Codex CLI（已验证 0.160.0）和 Node.js 22 或更新版本。机器人通过独立 `CODEX_HOME` 保存自己的配置、认证及会话；默认目录为 `codex-home/`。升级 CLI 后建议重新运行文末协议测试。
 
 - （可选）一个可被编译器找到的 CUDA Toolkit。
 
@@ -20,37 +20,48 @@ AliveBot（灰眸）是一个 Rust 编写的基于 [nagisa](https://github.com/d
 
 ## 入门
 
-1. 启动 NapCatQQ（或其他 OneBot 实现）并登录 QQ 账号；
-   配置一个无认证 token 的 WebSocket 服务器；
-   建议端口：8080。（若选择其他端口，需要同时在 AliveBot 中配置 url）
+以下命令在 AliveBot 仓库根目录执行。配置复制命令仅用于首次安装；已有配置请直接编辑，避免覆盖。
 
-2. 首次安装先将 `codex-service/config.example.json` 复制为 `codex-service/config.json`；其中 `executable` 可填写 PATH 中的 `codex` 或 CLI 的完整路径。实例配置、`codex-home` 和群工作区均不提交 Git。准备 `codex-home/config.toml`（示例见 `config/codex_runtime_example.toml`），运行 `Codex登录.ps1` 登录机器人专用账号环境，再运行 `启动Codex服务.ps1`。已有机器人登录状态时无需重复登录。
+1. 启动 OneBot 协议端并登录 QQ，配置正向 WebSocket 服务，消息格式使用数组，开启自身消息上报。默认地址为 `ws://127.0.0.1:8080`。当前程序未提供单独的 OneBot token 参数；使用无 token 的本机连接时，服务端应仅监听 `127.0.0.1`。
 
-3. 在 AliveBot 目录构建并运行主程序，使用原有的 `config/config.toml`。启动前先确认 Codex 服务已运行。每个群会创建 `memes` 并复制 `faces.csv`。
+2. 创建三份本机配置：
+
+   ```powershell
+   Copy-Item config/config_example.toml config/config.toml
+   Copy-Item codex-service/config.example.json codex-service/config.json
+   New-Item -ItemType Directory -Force codex-home | Out-Null
+   Copy-Item config/codex_runtime_example.toml codex-home/config.toml
+   ```
+
+   将 `config/config.toml` 的示例群号换成自己的白名单，填写 `system_prompt` 并选择账号可用的模型；`codex-service/config.json` 中的 `executable` 可以是 PATH 中的 `codex` 或 CLI 完整路径。不要省略主配置里的 `system_prompt`：文件模式会在投递前重新读取它。
+
+3. 执行 `./Codex登录.ps1` 登录机器人专用 Codex 环境，再执行 `./启动Codex服务.ps1`。服务脚本在前台运行，保留这个进程；已有专用登录状态时无需重新登录。登录脚本使用固定的 `codex-home/`，若自行更改服务配置的 `home`，也需调整登录所用的 `CODEX_HOME`。
+
+4. 在另一个终端中构建并运行机器人：
 
    ```powershell
    cargo build --release --target-dir target/codex
    ./target/codex/release/AliveBot.exe --config config/config.toml
    ```
 
-现在，您已经创建了一个最基础的~~可用~~的群聊机器人！它会接收群中的消息，默认在被明确 @ 时调用模型生成回复。
+每个群使用自己的工作区，初始化时创建 `memes/` 并复制 `config/faces.csv`。机器人只处理白名单群，私聊不处理；默认空闲时只有明确 @ 机器人才触发模型回复。
 
 #### [命令]
 
-使用 `/` 开头即可发送命令。命令不会传给 LLM，而是执行一些固定操作。
+以下命令在白名单群内使用。原命令文字不作为普通群消息传给模型；`/stop` 会另外写入停止任务的控制说明。
 
 - `/ping`：检查机器人是否在线
 - `/new`：停止旧会话的执行并新建 Codex 会话，保留工作目录文件
 - `/stop`：停止当前任务，保留会话历史及工作目录
-- `/face`：发送表情
-- `/faceid`：查询表情 ID
-- `/react`：给被回复的消息添加回应
+- `/face 14`：发送指定 ID 的 QQ 内置表情
+- `/faceid` 后紧接一个实际的 QQ 内置表情：查询该表情 ID；不要发送表情名称文本
+- 引用一条群消息，再发送 `/react 👍` 或 `/react` 后附 QQ 内置表情：给该消息添加回应；支持情况取决于协议端和表情类型
 
 
 
 ## 配置
 
-AliveBot 有如下参数可以进行配置。
+下表是程序内置默认值，不是某个运行实例的配置。命令行布尔选项需显式填写 `true` 或 `false`，例如 `--fast-mode true`。
 
 | 参数名                | 类型         | 默认值                                          | 说明                                                         |
 | --------------------- | ------------ | ----------------------------------------------- | ------------------------------------------------------------ |
@@ -62,8 +73,8 @@ AliveBot 有如下参数可以进行配置。
 | `--model`, `-m` | `String` | `gpt-6.1-sol` | Codex 模型 ID |
 | `--reasoning-effort` | `String` | `high` | 推理强度；须由所选模型支持 |
 | `--fast-mode` | `bool` | `false` | 每个新 turn 是否使用 Fast；false 明确使用普通速度；修改后重启 AliveBot |
-| `--group-whitelist`   | `'Vec<i64>'` | `'[593883760]'`                                 | 群聊白名单；多个群号需要重复传入该参数                       |
-| `--self-accounts`     | `'Vec<i64>'` | `'[1787552039, 3550036364]'`                    | 只加入上下文而不触发模型回复的账号                           |
+| `--group-whitelist` | `Vec<i64>` | `[]` | 群白名单；空列表不处理任何群；多个群号重复传入该参数 |
+| `--self-accounts` | `Vec<i64>` | `[]` | 列表内账号空闲时只记录，运行中仍以 steer 注入 |
 | `--mention-only`      | `'bool'`     | `'true'`                                       | 仅被明确 @ 当前机器人账号时触发模型回复；false 恢复自动回复 |
 | `--system-prompt`     | `'String'`   | `'你正在参加一个真实、持续运作的熟人QQ群聊...'` | 模型的系统提示词                                             |
 | `--enable-transcript` | `'bool'`     | `'false'`                                       | 是否接收语音消息并转录。在启动时自动准备 FFmpeg 和 Whisper 模型 |
@@ -86,7 +97,7 @@ AliveBot 有如下参数可以进行配置。
 
 **可以用系统提示词为机器人设定人格**。相信你对此并不陌生！
 
-不过默认提示词中存在很多重要的规则说明，因此建议在后面追加自己的提示词而不是替换。
+`system_prompt` 会整体替换内置提示词，程序不会自动追加内置规则。可以重写人格和行为要求；若要让模型使用图片、文件、引用等动作，需要在自己的提示词或另行配置的规则文件里说明相应格式。
 
 #### [认识]
 
@@ -106,7 +117,7 @@ AliveBot 有如下参数可以进行配置。
 
 `config/faces.csv` 提供 QQ 内置表情的名称。群工作区初始化时会将它复制到工作区根目录的 `faces.csv`，供 Agent 直接读取；已有副本会保留。群图片以 `<img:原始URL>` 文本标记传给 Agent，保留完整地址与查询参数。AliveBot 不再预下载、压缩或转成 Base64 视觉附件；Agent 按需用命令行下载原文件，再用图片查看工具读取。URL 可能过期，下载失败时应如实说明。
 
-每群使用 `workspace/<群号>/` 作为工作目录，并自动创建其中的 `memes/` 素材文件夹。目录中的图片由 Agent 通过命令行管理，名称和简介可记录到知识库的“QQ 表情库”。发送本地图片时使用 `<img:相对路径>`，例如 `<img:memes/图片.png>`；路径基于当前群的 Agent 工作目录，文件必须真实存在且位于该目录内。它按普通图片发送，可以与文字混排。输入 URL 引用需先下载为本地文件，再通过相对路径发送。其他输出格式包括普通文字、QQ 内置表情、引用、@、贴表情、戳一戳和消息查询。
+每群使用 `workspace/<群号>/` 作为工作目录，并自动创建其中的 `memes/` 素材文件夹。目录中的图片由 Agent 通过命令行管理，若已另外接入知识库，名称和简介可记录到其中的表情区块。发送本地图片时使用 `<img:相对路径>`，例如 `<img:memes/图片.png>`；路径基于当前群的 Agent 工作目录，文件必须真实存在且位于该目录内。它按普通图片发送，可以与文字混排。输入 URL 引用需先下载为本地文件，再通过相对路径发送。其他输出格式包括普通文字、QQ 内置表情、引用、@、贴表情、戳一戳和消息查询。
 
 群文件以独立的 `<file path:原始URL, name:原文件名, size:字节数>` 消息传给 Agent；文件名和大小写在标签内，上传者 UIN 位于消息头。文件 ID 仅在程序内部使用；收到上传通知但没有 URL 时，通过 OneBot 查询群文件下载链接。Agent 按需下载并读取，失效链接的 path 标记为 unavailable，仍保留 name 和 size；文件名中的特殊字符使用 HTML 实体转义。文件内容不直接作为视觉附件注入。
 
@@ -150,11 +161,13 @@ Cargo 只负责启用 CUDA feature，不会安装 CUDA Toolkit。**需要自行�
 
 空闲时，触发回复的消息启动 turn；其他消息通过 `thread/inject_items` 记录且不调用模型。工作中的所有有效消息，包括自身非模型消息，均以 `turn/steer` 追加当前轮。模型生成消息的 QQ 回传直接过滤。steer 和当前轮结束发生竞争时，重新核对状态，选择启动或只记录，不使用下一轮 queue。
 
-过程说明与最终答复均可发送，思考和工具输出不发送。工具日志只有名称、状态，不保存参数和结果。输入、主提示词和公开输出日志位于 `codex-home/alivebot/trace-日期.jsonl`；Codex 原始诊断另存 `app-server.stderr.log`，不展示到工具过程窗口。
+过程说明与最终答复均可发送到 QQ，思考和工具输出不会直接作为 QQ 回复发送。AliveBot 的 `codex-home/alivebot/trace-日期.jsonl` 记录输入、主提示词、公开输出，以及适配层识别到的工具名称和状态，不包含工具参数或结果；它不是完整的工具执行记录，嵌套调用等过程可能不会逐项显示。
 
-修改配置文件中的 `system_prompt` 无需重启。下次空闲投递前，会卸载并恢复该 thread，重新应用主提示词。工作中修改会在下一轮生效，不中断正在执行的工具。模型、推理强度、运行目录等其他配置修改仍需重启相应服务。主提示词仍只有这一份，插件使用说明不追加成新的全局人格提示词。
+Codex 自己的会话文件和日志仍可能保存工具参数、结果及查看图片时产生的图片数据，不能把“简化日志不显示”理解成“整个系统不保存”。诊断标准错误另存 `codex-home/alivebot/app-server.stderr.log`。这些运行数据均不提交 Git。
 
-输入图片仅保留 `<img:原始URL>` 文本；Agent 自行下载和查看。图片、文件发送仍限定当前群工作区内的路径。memory 和 gcsim 保留其现有独立 CLI 和使用说明，不需要运行 OpenCode。
+使用文件提示词时，修改配置文件中的 `system_prompt` 无需重启。若启动时指定了 `--system-prompt`，该命令行值优先，文件修改不会被读取，需要调整启动参数并重启。下次空闲投递前，会卸载并恢复该 thread，重新应用主提示词。工作中修改会在下一轮生效，不中断正在执行的工具。模型、推理强度、运行目录等其他配置修改仍需重启相应服务。AliveBot 传入的主提示词来自上述选定来源；工作区内另行配置的指引、工具规则及 Codex 内置指令不属于这一字段。
+
+输入图片仅保留 `<img:原始URL>` 文本；Agent 自行下载和查看。图片、文件发送仍限定当前群工作区内的路径。memory、gcsim 和“QQ 表情库”是本机部署中另行接入的能力，不包含在本仓库，也不会自动安装或注册为 Codex 工具。需要使用时，自行安装相应 CLI 并提供使用说明；它们不要求启动 OpenCode 服务。
 
 确定已接受的消息不会重复提交；连接中断导致接受结果不明时，保留待投递状态并报错，避免盲目重复启动工具或发送。`/stop` 中断当前轮；`/new` 建立新会话，保留素材和回传过滤记录。
 
@@ -166,10 +179,10 @@ node --test codex-service/bridge.test.mjs
 python codex-service/check_protocol.py
 ```
 
-最后一项使用真实 CLI 和完全本地的模型替身，验证记录、steer、工具执行、提示词刷新及重启恢复，不调用付费模型，不连接 QQ。
+最后一项需要 Python 3 和可执行的 Codex CLI（默认从 PATH 查找，也可设置 `CODEX_EXECUTABLE`）。它使用真实 CLI 和完全本地的模型替身，验证记录、steer、工具执行、提示词刷新及重启恢复，不调用付费模型，不连接 QQ。
 
 ## 协议端切换
 
-AliveBot 通过 OneBot 11 正向 WebSocket 连接协议端，Codex、memory、gcsim 和 Yunzai 宿主相互独立。LLBot 提供对应的 OneBot 11 接口，但本部署仍待 LLBot Auth Token 审核及端到端验证，不能将接口存在等同于全部功能已验证。
+AliveBot 通过 OneBot 11 正向 WebSocket 连接协议端，Codex、memory、gcsim 和 Yunzai 宿主相互独立。LLBot 提供对应的 OneBot 11 接口，但截至 2026-10-04，本机部署仍待 LLBot Auth Token 审核及端到端验证，不能将接口存在等同于全部功能已验证。
 
 LLBot 连接应使用数组消息格式并开启 `reportSelfMessage`，以保留同账号非模型消息和模型回复去重。更换协议端后旧消息 ID 不保证仍可用于引用、撤回或表情回应；切换应在在途发送完成后进行。普通图片和文件目前使用协议端可读取的本地路径，同一 Windows 主机可继续使用，跨系统部署需要内容上传或路径映射。Yunzai 使用另一条连接，关闭自身消息上报以避免触发插件循环。
